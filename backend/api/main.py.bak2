@@ -1,0 +1,53 @@
+import os
+
+from fastapi import FastAPI
+
+from backend.api.middleware.rate_limiter import (
+    InMemoryBackend,
+    RateLimitMiddleware,
+    RateRule,
+    RedisBackend,
+)
+
+app = FastAPI(
+    title="Web Port Scanner",
+    description="Authorized network assessment platform",
+    version="1.0.0",
+)
+
+
+def build_backend():
+    redis_url = os.getenv("REDIS_URL")
+    if redis_url:
+        import redis.asyncio as redis
+
+        return RedisBackend(redis.from_url(redis_url))
+    # Single-process only: fine for local dev and tests, not for deployment.
+    return InMemoryBackend()
+
+
+RATE_RULES = [
+    RateRule("login", limit=5, window_seconds=60,
+             path_prefix="/auth/login", methods=frozenset({"POST"})),
+    RateRule("scans", limit=10, window_seconds=60,
+             path_prefix="/scans", methods=frozenset({"POST"})),
+    RateRule("default", limit=120, window_seconds=60),
+]
+
+app.add_middleware(
+    RateLimitMiddleware,
+    backend=build_backend(),
+    rules=RATE_RULES,
+    trust_proxy=os.getenv("BEHIND_PROXY", "false").lower() == "true",
+    exempt_paths=("/api/health",),
+)
+
+
+@app.get("/")
+async def root():
+    return {"message": "Web Port Scanner API", "status": "running"}
+
+
+@app.get("/api/health")
+async def health():
+    return {"status": "healthy"}
