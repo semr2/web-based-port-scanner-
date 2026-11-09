@@ -7,3 +7,5 @@ __pycache__/
 dev.db
 *.db
 .pytest_cache/
+dev.db.bak
+dev.db.bak

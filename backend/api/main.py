@@ -9,6 +9,7 @@ from backend.api.middleware.sliding_window import (
     SlidingWindowRedisBackend,
 )
 from backend.api.routes.auth import router as auth_router
+from backend.api.routes.scans import router as scans_router
 from backend.database.session import Base, get_engine
 from backend.models.user import User  # noqa: F401  (registers the table)
 
@@ -57,6 +58,7 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(scans_router)
 
 
 @app.get("/")
