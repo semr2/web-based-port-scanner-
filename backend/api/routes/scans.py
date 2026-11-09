@@ -67,7 +67,14 @@ def create_scan(
 
     # 3. Create the record. Actual scanning is queued separately (T007/T008); this
     #    endpoint only validates and records the request.
-    scan = Scan(owner_id=user.id, status=ScanStatus.QUEUED, port_count=len(body.ports))
+    scan = Scan(
+        owner_id=user.id,
+        status=ScanStatus.QUEUED,
+        port_count=len(body.ports),
+        target=body.target.strip().lower(),
+        ports=list(body.ports),
+        resolved_ips=[str(ip) for ip in approved_ips],
+    )
     db.add(scan)
     db.commit()
     db.refresh(scan)
