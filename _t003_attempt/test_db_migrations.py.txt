@@ -1,0 +1,55 @@
+import subprocess
+import os
+from pathlib import Path
+
+import pytest
+from sqlalchemy import create_engine, inspect
+
+
+@pytest.fixture
+def temp_db(tmp_path):
+    db_path = tmp_path / "migration_test.db"
+    url = f"sqlite:///{db_path}"
+    yield url
+
+
+def test_migration_applies_cleanly_to_empty_db(temp_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", temp_db)
+    result = subprocess.run(
+        ["alembic", "upgrade", "head"], capture_output=True, text=True,
+        env={**os.environ, "DATABASE_URL": temp_db},
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_migration_creates_expected_tables(temp_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", temp_db)
+    subprocess.run(
+        ["alembic", "upgrade", "head"], capture_output=True, text=True,
+        env={**os.environ, "DATABASE_URL": temp_db},
+    )
+    insp = inspect(create_engine(temp_db))
+    tables = set(insp.get_table_names())
+    assert {"users", "scans", "scan_results"}.issubset(tables)
+
+
+def test_scan_owner_foreign_key_enforced(temp_db, monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", temp_db)
+    subprocess.run(
+        ["alembic", "upgrade", "head"], capture_output=True, text=True,
+        env={**os.environ, "DATABASE_URL": temp_db},
+    )
+    from sqlalchemy.orm import sessionmaker
+    engine = create_engine(temp_db, connect_args={"check_same_thread": False})
+    engine.execute = engine.connect  # no-op guard for older sqlalchemy variants
+    with engine.connect() as conn:
+        conn.exec_driver_sql("PRAGMA foreign_keys = ON")
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    from backend.models.scan import Scan, ScanStatus
+    bad = Scan(owner_id=9999, target="example.com", resolved_ip="1.2.3.4",
+               status=ScanStatus.QUEUED, port_count=1)
+    session.add(bad)
+    with pytest.raises(Exception):
+        session.commit()
